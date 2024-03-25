@@ -5,11 +5,11 @@ const routerApi = require('./routes')
 const { /* logErrors, */ errorHandler, boomErrorHandler } = require('./middlewares/error.handler')
 
 const app = express()
-const port = '3000'
+const port = process.env.PORT || 3000
 
 app.use(express.json())
 
-/* const whitelist = ['http://127.0.0.1:5500']
+/* const whitelist = ['http://localhost:8080', 'http://localhost']
 const options = {
     origin: (origin, callback) => {
         if (whitelist.includes(origin) || origin) {
@@ -22,12 +22,12 @@ const options = {
 app.use(cors(options)) */
 
 // Endpoint simple en la raiz
-app.get('/', (req, res) => {
+app.get('/api', (req, res) => {
     res.send('Hola mi server en express')
 })
 
 // Endpoint simple en ruta de un nivel
-app.get('/nueva-ruta', (req, res) => {
+app.get('/api/nueva-ruta', (req, res) => {
     res.send('Hola nueva ruta')
 })
 
