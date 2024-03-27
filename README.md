@@ -108,3 +108,57 @@ async find() {
 ```
 
 El objeto client devuelto por getConnection tiene un método 'query' al que le pasamos las querys de consulta a base de datos.
+
+## Clase 7 Manejando un Pool de conexiones
+
+La forma de conexión a la base de datos usada anteriormente no es la más correcta. Es mejor usar un pool de conexiones. De esta manera la primera llamada a la base de datos creará una conexión mediante un pool y no dejará abiertas una conexión por cada cliente como hacía el método de la clase anterior.
+
+Para acceder mediante este método simplemente hacemos lo siguiente:
+
+1. Creamos un nuevo archivo en libs con la conexión mediante pool:
+
+```
+const { Pool } = require('pg')
+
+const pool = new Pool({
+    host: 'localhost',
+    port: 5432,
+    user: 'admin',
+    password: 'admin123',
+    database: 'my_store'
+})
+
+module.exports = pool
+
+```
+
+Esta vez no hace falta que vaya dentro de una función asíncrona ya que es algo que pool ya gestiona internamente.
+
+2. Una vez tenemos la conexión la llamamos de la siguiente forma:
+
+Primeo importamos el objeto pool
+
+```
+const pool = require('../libs/postgres.pool')
+```
+
+Y después lo añadimos al constructor de la clase, en este caso la clase productos.
+
+```
+constructor() {
+    this.products = []
+    this.generate()
+    this.pool = pool
+    this.pool.on('error', (err) => console.error(err)) // Aquí capturamos los errores para mostrarlos por consola, no es obligatorio
+}
+```
+
+Y por último, usamos el objeto para hacer la llamada mediante una query.
+
+```
+async find() {
+    const query = 'SELECT * FROM tasks'
+    const rta = await this.pool.query(query)
+    return rta.rows
+}
+```
