@@ -4,7 +4,7 @@
 
 Se crea docker-compose-yml usado para crear el contenedor de postgres
 
-```
+```yml
 services:
   postgres:
     image: postgres:latest //Aquí podemos dejar una versión concreta o la última
@@ -18,22 +18,22 @@ services:
       - ./postgres_data:/var/lib/postgresql/data // Volumen donde se persisten los datos de la BBDD, esta dirección se puede ver en la configuración del docker
 ```
 
-Para levantar el servicio concreta de postgres (nombre que le hemos dado al servicio) se usa el comando "docker-compose up -d postgress"
+Para levantar el servicio concreto de postgres (nombre que le hemos dado al servicio) se usa el comando "docker-compose up -d postgress"
 
 Otros comandos útiles de docker:
 
--   docker-compose ps --> Nos muestra los servicios actualmente levantados
--   docker-compose down --> Para los servicios actualmente levantados. Se puede añadir nombre del servicio si queremos solo parar uno en concreto
+- docker-compose ps --> Nos muestra los servicios actualmente levantados
+- docker-compose down --> Para los servicios actualmente levantados. Se puede añadir nombre del servicio si queremos solo parar uno en concreto
 
 ## Clase 5 Explorando Postgres: interfaces gráficas vs. terminal
 
 docker-compose exec postgres bash
 
-_// De esta manera nos conectamos a la terminal del servicio llamado postgres. Desde aquí se puede configurar la bbdd. Pero se va a hacer desde interfaz gráfica_
+> De esta manera nos conectamos a la terminal del servicio llamado postgres. Desde aquí se puede configurar la bbdd. Pero se va a hacer desde interfaz gráfica
 
 Añadimos un servicio de pgadmin (interfaz gráfica para postgres) al docker-compose
 
-```
+```yml
 version: "3.3"
 
 services:
@@ -72,7 +72,7 @@ Vamos a usar una librería para la integración entre node y postgres. Para ello
 
 Una vez hecho, agregamos una carpeta lib al proyecto done metemos un archivo postgres.js donde manejamos la conexión a la base de datos
 
-```
+```javascript
 const { Client } = require('pg')
 
 async function getConnection() {
@@ -93,13 +93,13 @@ module.exports = getConnection
 
 Ahora para poder hacer una conexión a BBDD vamos a usar un objeto cliente que es traido de la función getConnection que acabamos de crear:
 
-```
+```javascript
 const getConnection = require('../libs/postgres')
 ```
 
 Desde este momento podemos hacer conexiones usando este objeto. Por ejemplo lo usamos en el servicio de usuarios, en el método find:
 
-```
+```javascript
 async find() {
     const client = await getConnection()
     const rta = await client.query('SELECT * FROM tasks')
@@ -111,13 +111,13 @@ El objeto client devuelto por getConnection tiene un método 'query' al que le p
 
 ## Clase 7 Manejando un Pool de conexiones
 
-La forma de conexión a la base de datos usada anteriormente no es la más correcta. Es mejor usar un pool de conexiones. De esta manera la primera llamada a la base de datos creará una conexión mediante un pool y no dejará abiertas una conexión por cada cliente como hacía el método de la clase anterior.
+La forma de conexión a la base de datos usada anteriormente no es la más correcta. Es mejor usar un pool de conexiones. De esta manera la primera llamada a la base de datos creará una conexión mediante un pool y no abrirá una conexión por cada cliente como hacía el método de la clase anterior.
 
 Para acceder mediante este método simplemente hacemos lo siguiente:
 
-1. Creamos un nuevo archivo en libs con la conexión mediante pool:
+### 1. Creamos un nuevo archivo en libs con la conexión mediante pool
 
-```
+```javascript
 const { Pool } = require('pg')
 
 const pool = new Pool({
@@ -134,17 +134,17 @@ module.exports = pool
 
 Esta vez no hace falta que vaya dentro de una función asíncrona ya que es algo que pool ya gestiona internamente.
 
-2. Una vez tenemos la conexión la llamamos de la siguiente forma:
+### 2. Una vez tenemos la conexión la llamamos de la siguiente forma
 
 Primeo importamos el objeto pool
 
-```
+```javascript
 const pool = require('../libs/postgres.pool')
 ```
 
 Y después lo añadimos al constructor de la clase, en este caso la clase productos.
 
-```
+```javascript
 constructor() {
     this.products = []
     this.generate()
@@ -155,10 +155,150 @@ constructor() {
 
 Y por último, usamos el objeto para hacer la llamada mediante una query.
 
-```
+```javascript
 async find() {
     const query = 'SELECT * FROM tasks'
     const rta = await this.pool.query(query)
     return rta.rows
 }
 ```
+
+## Clase 8 Variables de ambiente en Node.js
+
+Hasta ahora se trataban los datos de conexión a base de datos dentro del código. Esto es una mala práctica. Se debe tratar en un archivo separado .env que no se suba a repositorios. Para ello vamos a hacer lo siguiente:
+
+Primero se crea un archivo de conexión componiendo la siguiente URI:
+
+  ```javascript
+  postgres://<user>:<password>@<host>:<port>/<database>?<query>
+  ```
+
+  Se compone en los archivos de libs, tanto client como pool:
+
+  ***postgres.pool.js***
+
+  ```javascript
+  const { Pool } = require('pg') // Se importa Pool de la librería
+  const { config } = require('../config/config') // El archivo config manejará el acceso a los datos de conexión
+
+  const USER = encodeURIComponent(config.dbUser) // Se usa encodeURIComponent para codificar caracteres especiales que puedan dar problemas en el URI (como por ejemplo: @ o $)
+  const PASSWORD = encodeURIComponent(config.dbPassword) // Se usa encodeURIComponent para codificar caracteres especiales que puedan dar problemas en el URI (como por ejemplo: @ o $)
+  const URI = `postgres://${USER}:${PASSWORD}@${config.dbHost}:${config.dbPort}/${config.dbName}` // Se compone la URI
+
+  const pool = new Pool({ connectionString: URI }) // Se crea la conexión mediante pool
+
+  module.exports = pool // Se exporta para tener acceso a la conexión establecida
+  ```
+
+***postgres.js***
+
+  ```javascript
+  const { Client } = require('pg')
+  const { config } = require('../config/config')
+
+  const USER = encodeURIComponent(config.dbUser)
+  const PASSWORD = encodeURIComponent(config.dbPassword)
+  const URI = `postgres://${USER}:${PASSWORD}@${config.dbHost}:${config.dbPort}/${config.dbName}`
+
+  async function getConnection() {
+      const client = new Client({ connectionString: URI })
+      await client.connect()
+
+      return client
+  }
+
+  module.exports = getConnection
+  ```
+
+Se separa la configuración de las variables usadas para configurar la base de datos, para proporcionar escalabilidad en caso de cambios a futuro no afectar al código.
+
+Primero se debe instalar la dependencia de la librería encargada de leer de un archivo .env y trasladarlo a variables de entorno:
+
+```jsx
+npm install dotenv
+```
+
+Se separa en un archivo .env los datos delicados que solo queremos que esté en local y no se suba a repositorios.
+
+***.env***
+
+```jsx
+PORT = 3000
+
+POSTGRES_USER='admin'
+POSTGRES_PASSWORD='admin123'
+POSTGRES_HOST='localhost'
+POSTGRES_DB='my_store'
+POSTGRES_PORT='5432'
+
+PGADMIN_DEFAULT_EMAIL='admin@mail.com'
+PGADMIN_DEFAULT_PASSWORD='root'
+PGADMIN_DEFAULT_PORT='5050'
+```
+
+> Importante: deberíamos dejar dentro del repositorio un archivo .env.example con los datos que necesitamos sin rellenar para que quien se descargue el proyecto sepa que datos tiene que rellenar
+
+***.env.example***
+
+```jsx
+PORT = 
+
+POSTGRES_USER=''
+POSTGRES_PASSWORD=''
+POSTGRES_HOST=''
+POSTGRES_DB=''
+POSTGRES_PORT=''
+
+PGADMIN_DEFAULT_EMAIL=''
+PGADMIN_DEFAULT_PASSWORD=''
+PGADMIN_DEFAULT_PORT=''
+```
+
+Después se compone el archivo con un objeto con los datos de configuración:
+
+***config.js***
+
+```javascript
+require('dotenv').config() // Se importa dotenv que es la librería encargada de leer de un archivo .env y trasladarlo a variables de entorno
+
+const config = { // Se crea el objeto configuración con los datos que tenemos en variables de entorno
+    env: process.env.NODE_ENV || 'dev',
+    port: process.env.PORT || 3000,
+    dbUser: process.env.POSTGRES_USER,
+    dbPassword: process.env.POSTGRES_PASSWORD,
+    dbHost: process.env.POSTGRES_HOST,
+    dbName: process.env.POSTGRES_DB,
+    dbPort: process.env.POSTGRES_PORT
+}
+
+module.exports = { config } // Se exporta el objeto con los datos de configuración 
+```
+
+Con esto ya tenemos la configuración de conexión de una base de datos en Node de Postgres
+
+Por último se protegen los datos en el docker-compose ya que aquí también hay datos delicados.
+
+***docker-compose.yml***
+
+```javascript
+services:
+    postgres:
+        image: postgres:16
+        ports:
+            - ${POSTGRES_PORT}:${POSTGRES_PORT}
+        environment:
+            - POSTGRES_DB=${POSTGRES_DB}
+            - POSTGRES_USER=${POSTGRES_USER}
+            - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+        volumes:
+            - ./postgres_data:/var/lib/postgresql/data
+    pgadmin:
+        image: dpage/pgadmin4
+        environment:
+            - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+            - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+        ports:
+            - ${PGADMIN_DEFAULT_PORT}:80
+```
+
+No es necessario importar niguna librería en este caso para que lea los archivo .env. Ya es algo que docker hace por defecto.
