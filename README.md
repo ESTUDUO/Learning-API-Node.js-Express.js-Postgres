@@ -71,3 +71,40 @@ Con esto queda configurado pgadmin
 Vamos a usar una librería para la integración entre node y postgres. Para ello instalamos pg con: npm i pg
 
 Una vez hecho, agregamos una carpeta lib al proyecto done metemos un archivo postgres.js donde manejamos la conexión a la base de datos
+
+```
+const { Client } = require('pg')
+
+async function getConnection() {
+    const client = new Client({
+        host: 'localhost',
+        port: 5432,
+        user: 'admin',
+        password: 'admin123',
+        database: 'my_store'
+    })
+    await client.connect()
+
+    return client
+}
+
+module.exports = getConnection
+```
+
+Ahora para poder hacer una conexión a BBDD vamos a usar un objeto cliente que es traido de la función getConnection que acabamos de crear:
+
+```
+const getConnection = require('../libs/postgres')
+```
+
+Desde este momento podemos hacer conexiones usando este objeto. Por ejemplo lo usamos en el servicio de usuarios, en el método find:
+
+```
+async find() {
+    const client = await getConnection()
+    const rta = await client.query('SELECT * FROM tasks')
+    return rta.rows
+}
+```
+
+El objeto client devuelto por getConnection tiene un método 'query' al que le pasamos las querys de consulta a base de datos.
