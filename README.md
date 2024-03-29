@@ -302,3 +302,162 @@ services:
 ```
 
 No es necessario importar niguna librería en este caso para que lea los archivo .env. Ya es algo que docker hace por defecto.
+
+## Clase 9 ¿Qué es un ORM? Instalación y configuración de Sequelize ORM
+
+Ahora se va a empezar a usar un ORM
+
+> Un ORM es un modelo de programación que permite mapear las estructuras de una base de datos relacional (Postgres, SQL Server, Oracle, MySQL, etc.), en adelante RDBMS (Relational Database Management System), sobre una estructura lógica de entidades con el objeto de simplificar y acelerar el desarrollo de nuestras aplicaciones.
+> Las estructuras de la base de datos relacional quedan vinculadas con las entidades lógicas o base de datos virtual definida en el ORM, de tal modo que las acciones CRUD (Create, Read, Update, Delete) a ejecutar sobre la base de datos física se realizan de forma indirecta por medio del ORM.
+
+Con este ORM vamos a independizar la capa de BBDD del código, de tal manera que no dependa del tipo de BBDD usada a la hora de ejecutar nuestro código y así poder migrar en un futuro a otra tecnología abstrayendo el código del cambio.
+
+Para ello vamos a usar sequelize (ORM usado en node.js y Typescript).
+
+### 1. Instalamos la dependencia con: npm i --save sequelize
+
+### 2. Necesitamos instalar los drivers que pide sequelize para el tipo de base de datos que usamos, en este caso Postgres necesitamos tanto pg como pg-hstore (pg ya la tenemos importada). Instalamos la dependencia de drivers: npm i --save pg-hstore
+
+### 3. Creamos el js encargado de la conexión con sequelize
+
+```javascript
+const { Sequelize } = require('sequelize')
+
+const { config } = require('../config/config')
+
+const USER = encodeURIComponent(config.dbUser)
+const PASSWORD = encodeURIComponent(config.dbPassword)
+const URI = `postgres://${USER}:${PASSWORD}@${config.dbHost}:${config.dbPort}/${config.dbName}`
+
+const sequelize = new Sequelize(URI, {
+    dialect: 'postgres', // Le decimos al tipo de BBDD al que queremos conectar
+    logging: true // Nos sacará por consola cada query que hagamos a la BBDD a través del ORM
+})
+
+module.exports = sequelize
+```
+
+### 4. Por último, usamos el objeto Sequelize para hacer una petición a la BBDDD
+
+```javascript
+const sequelize = require('../libs/sequelize')
+.
+.
+.
+async find() {
+        const query = 'SELECT * FROM tasks ORDER BY id ASC'
+        const [data, metadata] = await sequelize.query(query) 
+        // Solo es necesario data. Metadata trae información extra que no es necesaria en este caso. Se deja para ver de ejemplo que es lo que trae.
+        return {data, metadata} 
+    }
+```
+
+```json
+{
+    "data": [
+        {
+            "id": 1,
+            "title": "Tarea 1",
+            "completed": false
+        },
+        {
+            "id": 2,
+            "title": "Tarea 2",
+            "completed": false
+        },
+        {
+            "id": 3,
+            "title": "Tarea 3",
+            "completed": false
+        },
+        {
+            "id": 4,
+            "title": "Tarea 4",
+            "completed": false
+        },
+        {
+            "id": 5,
+            "title": "Tarea 5",
+            "completed": false
+        }
+    ],
+    "metadata": {
+        "command": "SELECT",
+        "rowCount": 5,
+        "oid": null,
+        "rows": [
+            {
+                "id": 1,
+                "title": "Tarea 1",
+                "completed": false
+            },
+            {
+                "id": 2,
+                "title": "Tarea 2",
+                "completed": false
+            },
+            {
+                "id": 3,
+                "title": "Tarea 3",
+                "completed": false
+            },
+            {
+                "id": 4,
+                "title": "Tarea 4",
+                "completed": false
+            },
+            {
+                "id": 5,
+                "title": "Tarea 5",
+                "completed": false
+            }
+        ],
+        "fields": [
+            {
+                "name": "id",
+                "tableID": 16409,
+                "columnID": 1,
+                "dataTypeID": 23,
+                "dataTypeSize": 4,
+                "dataTypeModifier": -1,
+                "format": "text"
+            },
+            {
+                "name": "title",
+                "tableID": 16409,
+                "columnID": 2,
+                "dataTypeID": 1043,
+                "dataTypeSize": -1,
+                "dataTypeModifier": 254,
+                "format": "text"
+            },
+            {
+                "name": "completed",
+                "tableID": 16409,
+                "columnID": 3,
+                "dataTypeID": 16,
+                "dataTypeSize": 1,
+                "dataTypeModifier": -1,
+                "format": "text"
+            }
+        ],
+        "_parsers": [
+            null,
+            null,
+            null
+        ],
+        "_types": {
+            "_types": {},
+            "text": {},
+            "binary": {}
+        },
+        "RowCtor": null,
+        "rowAsArray": false,
+        "_prebuiltEmptyResultObject": {
+            "id": null,
+            "title": null,
+            "completed": null
+        }
+    }
+}
+```
