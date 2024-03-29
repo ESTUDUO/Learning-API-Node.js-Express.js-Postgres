@@ -461,3 +461,96 @@ async find() {
     }
 }
 ```
+
+## Clase 10 ¿Qué es un ORM? Instalación y configuración de Sequelize ORM
+
+Ahora vamos a crear los modelos de las tablas de BBDD en el código. De esta manera independizamos la base de datos del código, dejando al ORM que se encargue de traducir estos modelos a la BBDD del tipo que nos permita. Por otro lado también se van a hacer las llamadas a la BBDD sin utilizar la query utilizando los métodos que nos permite el ORM.
+
+Primero creamos el modelo de la tabla 'User'
+
+***./api/db/models/user.models.js***
+
+```javascript
+const { Model, DataTypes, Sequelize } = require('sequelize')
+
+const USER_TABLE = 'users'
+
+const UserSchema = {
+    id: {
+        allowNull: false,
+        autoIncrement: true,
+        primaryKey: true,
+        type: DataTypes.INTEGER
+    },
+    email: {
+        allowNull: false,
+        type: DataTypes.STRING,
+        unique: true
+    },
+    password: {
+        allowNull: false,
+        type: DataTypes.STRING
+    },
+    createdAt: {
+        allowNull: false,
+        type: DataTypes.DATE,
+        field: 'created_at',
+        defaultValue: Sequelize.NOW
+    }
+}
+
+class User extends Model { // Necesario extender de la clase Model que nos aporta los métodos que necesitamos
+    static associate() {} // Al ser static no necesitamos crear el objeto para hacer uso del método
+    static config(sequelize) {
+        return {
+            sequelize,
+            tableName: USER_TABLE, // Nombre de la tabla en BBDD
+            modelName: 'User', // Nombre de la tabla en el modelo usado en Javascript
+            timestamps: false
+        }
+    }
+}
+
+module.exports = { USER_TABLE, UserSchema, User }
+```
+
+Ahora creamos un archivo encargado de recopilar todos los modelos y añadirle el objeto sequelize.
+
+Aquí se irán añadiendo los modelos según se vayan creando.
+
+***./api/db/models/index.js***
+
+```javascript
+const { User, UserSchema } = require('./user.model')
+
+function setupModels(sequelize) {
+    User.init(UserSchema, User.config(sequelize))
+}
+
+module.exports = setupModels
+```
+
+Por terminar se modifica el archivo sequelize.js para funcionar con los modelos. Para ello, simplemente se importa el setupModels creado y se llama a la función pasándole el objeto sequelize que acabamos de crear. Por último, se llama a la función sync de sequelize para que al conectar sincronice con la BBDD los modelos creados.
+
+***./api/libs/sequelize.js***
+
+```javascript
+const setupModels = require('../db/models/index')
+
+setupModels(sequelize)
+
+sequelize.sync()
+```
+
+Ahora ya podemos usar el modelo de 'users' para hacer llamadas en vez de usar las query.
+
+***./api/service/user.service.js***
+
+```javascript
+const { models } = require('../libs/sequelize')
+
+async find() {
+    const rta = await models.User.findAll()
+    return rta
+}
+```
