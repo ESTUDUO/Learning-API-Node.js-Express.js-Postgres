@@ -594,3 +594,159 @@ class UserService {
     }
 }
 ```
+
+## Clase 12 Cambiando la base de datos a MySQL
+
+Para demostrar la capacidad del ORM de hacer agnóstico el código de la base de datos usada, se va a cambiar la BBDD de Postgres a Mysql. Además mediante variables de entorno se podrá elegir fácilmente entre ambas BBDD.
+
+Antes de nada se va a crear un handler para tratar los errores que vienen del sequelize.
+
+Primero se crea el handler que trata los errores.
+
+***./api/middlewares/error.handler.js***
+
+```javascript
+function ormErrorHandler(err, req, res, next) {
+    if (err instanceof ValidationError) {
+        res.status(409).json({
+            statusCode: 409,
+            message: err.name,
+            errors: err.errors
+        })
+    } else {
+        next(err)
+    }
+}
+```
+
+Lo agregamos al index en el orden que queremos que se traten los errores.
+
+***./api/index.js***
+
+```javascript
+const {
+    errorHandler,
+    boomErrorHandler,
+    ormErrorHandler
+} = require('./middlewares/error.handler')
+
+app.use(ormErrorHandler)
+app.use(boomErrorHandler)
+app.use(errorHandler)
+
+```
+
+Una vez hecho esto, vamos a adaptar el código para el cambio de BBDD.
+
+Primero vamos a crear el docker-compose con la base de datos de Mysql y su interfaz gráfica con phpmyadmin
+
+***./docker-compose.yml***
+
+```yml
+    mysql:
+        image: mysql:5
+        environment:
+            - MYSQL_DATABASE=${MYSQL_DATABASE}
+            - MYSQL_USER=${MYSQL_USER}
+            - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+            - MYSQL_PORT=${MYSQL_PORT}
+        ports:
+            - ${MYSQL_PORT}:${MYSQL_PORT}
+        volumes:
+            - ./mysql_data:/var/lib/mysql
+    phpmyadmin:
+        image: phpmyadmin/phpmyadmin
+        environment:
+            - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+            - PMA_HOST=mysql
+        ports:
+            - ${PHPMYADMIN_PORT}:80
+
+```
+
+Estas nuevas variables de entorno se agregan al archivo .env. También se agrega una variable 'DB_TYPE' donde diremos que BBDD vamos a usar
+
+***./.env***
+
+```yml
+PORT = 
+
+DB_TYPE =''
+
+POSTGRES_USER=''
+POSTGRES_PASSWORD=''
+POSTGRES_HOST=''
+POSTGRES_DB=''
+POSTGRES_PORT=''
+
+MYSQL_DATABASE=''
+MYSQL_USER=''
+MYSQL_HOST=''
+MYSQL_ROOT_PASSWORD=''
+MYSQL_PORT=''
+
+PGADMIN_DEFAULT_EMAIL=''
+PGADMIN_DEFAULT_PASSWORD=''
+PGADMIN_DEFAULT_PORT=''
+
+PHPMYADMIN_PORT=''
+```
+
+Actualizamos el archivo config con las nueva configuración de variables
+
+***./config/config.js***
+
+```javascript
+const config = {
+    env: process.env.NODE_ENV || 'dev',
+    port: process.env.PORT || 3000,
+    dbType: process.env.DB_TYPE,
+
+    dbPostgresUser: process.env.POSTGRES_USER,
+    dbPostgresPassword: process.env.POSTGRES_PASSWORD,
+    dbPostgresHost: process.env.POSTGRES_HOST,
+    dbPostgresName: process.env.POSTGRES_DB,
+    dbPostgresPort: process.env.POSTGRES_PORT,
+
+    dbMysqlUser: process.env.MYSQL_USER,
+    dbMysqlPassword: process.env.MYSQL_ROOT_PASSWORD,
+    dbMysqlHost: process.env.MYSQL_HOST,
+    dbMysqlName: process.env.MYSQL_DATABASE,
+    dbMysqlPort: process.env.MYSQL_PORT
+}
+```
+
+Ahora levantamos el docker con docker-compose up -d
+
+En el caso de mysql me he encontrado con un par de fallos a la hora de conectar.
+
+- El puerto ya estaba en uso (típicamente se usa el puerto 3306). La solución que me ha funcionado para esto es matar el proceso que está usando el puerto con: netstat -aon | findstr :3306 (para ver el id del proceso en uso) y taskkill /pid IdTASK /F (para matar el proceso)
+- Que el usuario y contraseña no te los reconozca como correctos. Se usa el usuario root. En caso de que con root tampoco funcione, he visto usuarios que les funciona dejando vacío el campo usuario. 
+
+Y ya por último actualizamos el archivo sequelize con la lógica para conectar a la nueva BBDD. Para ello antes necesitamos importar la **librería driver para mysql** con: **npm i --save mysql2**
+
+***./libs/sequelize.js***
+
+```javascript
+let URI = ''
+
+if (config.dbType == 'postgres') { // Según lo que pongamos en la variable dbTypes construye la conexión para esa BBDD
+    const USER = encodeURIComponent(config.dbPostgresUser)
+    const PASSWORD = encodeURIComponent(config.dbPostgresPassword)
+    URI = `postgres://${USER}:${PASSWORD}@${config.dbPostgresHost}:${config.dbPostgresPort}/${config.dbPostgresName}`
+}
+
+if (config.dbType == 'mysql') {
+    const USER = encodeURIComponent(config.dbMysqlUser)
+    const PASSWORD = encodeURIComponent(config.dbMysqlPassword)
+    URI = `mysql://${USER}:${PASSWORD}@${config.dbMysqlHost}:${config.dbMysqlPort}/${config.dbMysqlName}`
+}
+
+const sequelize = new Sequelize(URI, {
+    dialect: config.dbType, // Ahora indicamos con variable de entorno el tipo de variable
+    logging: true
+})
+
+```
+
+De esta manera queda configurado nuestro proyecto para funcionar con BBDD Mysql o Postgres solo cambiando la variable de entorno dbType.
