@@ -554,3 +554,43 @@ async find() {
     return rta
 }
 ```
+
+## Clase 11 Crear, actualizar y eliminar
+
+Ahora vamos a crear el CRUD de los usuarios (acrónimo de "Crear, Leer, Actualizar y Borrar") de la API mediante sequelize. Para ello vamos a modificar el servicio de usuarios adaptándolo a sequelize y sus métodos.
+
+***./api/service/user.service.js***
+
+```Javascript
+class UserService {
+    constructor() {}
+
+    async create(data) {
+        const newUser = await models.User.create(data) // Usamos el método create de sequelize
+        return newUser
+    }
+
+    async find() {
+        const rta = await models.User.findAll() 
+        return rta
+    }
+
+    async findOne(id) {
+        const user = await models.User.findByPk(id) // Usamos el método findByPk de sequelize
+        if (!user) throw boom.notFound('User not found')
+        return user
+    }
+
+    async update(id, changes) {
+        const user = await this.findOne(id) // Al tener ya creado el método findOne lo reutilizamos para que ese método capture los errores y así reutilizar código
+        const rta = await user.update(changes)
+        return rta
+    }
+
+    async delete(id) {
+        const user = await this.findOne(id) // Al tener ya creado el método findOne lo reutilizamos para que ese método capture los errores y así reutilizar código
+        await user.destroy()
+        return { id }
+    }
+}
+```
