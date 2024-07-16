@@ -599,7 +599,7 @@ class UserService {
 
 Para demostrar la capacidad del ORM de hacer agnóstico el código de la base de datos usada, se va a cambiar la BBDD de Postgres a Mysql. Además mediante variables de entorno se podrá elegir fácilmente entre ambas BBDD.
 
-Antes de nada se va a crear un handler para tratar los errores que vienen del sequelize.
+Antes de nada (sin tener que ver con el cambio de base de datos) se va a crear un handler para tratar los errores que vienen del sequelize.
 
 Primero se crea el handler que trata los errores.
 
@@ -625,11 +625,13 @@ Lo agregamos al index en el orden que queremos que se traten los errores.
 
 ```javascript
 const {
+    logErrors,
     errorHandler,
     boomErrorHandler,
     ormErrorHandler
 } = require('./middlewares/error.handler')
 
+app.use(logErrors)
 app.use(ormErrorHandler)
 app.use(boomErrorHandler)
 app.use(errorHandler)
@@ -721,7 +723,7 @@ Ahora levantamos el docker con docker-compose up -d
 En el caso de mysql me he encontrado con un par de fallos a la hora de conectar.
 
 - El puerto ya estaba en uso (típicamente se usa el puerto 3306). La solución que me ha funcionado para esto es matar el proceso que está usando el puerto con: netstat -aon | findstr :3306 (para ver el id del proceso en uso) y taskkill /pid IdTASK /F (para matar el proceso)
-- Que el usuario y contraseña no te los reconozca como correctos. Se usa el usuario root. En caso de que con root tampoco funcione, he visto usuarios que les funciona dejando vacío el campo usuario. 
+- Que el usuario y contraseña no te los reconozca como correctos. Se usa el usuario root. En caso de que con root tampoco funcione, he visto usuarios que les funciona dejando vacío el campo usuario.
 
 Y ya por último actualizamos el archivo sequelize con la lógica para conectar a la nueva BBDD. Para ello antes necesitamos importar la **librería driver para mysql** con: **npm i --save mysql2**
 
