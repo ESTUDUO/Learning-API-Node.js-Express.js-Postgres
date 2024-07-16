@@ -752,3 +752,57 @@ const sequelize = new Sequelize(URI, {
 ```
 
 De esta manera queda configurado nuestro proyecto para funcionar con BBDD Mysql o Postgres solo cambiando la variable de entorno dbType.
+
+## Clase 13 ¿Qué son las migraciones? Migraciones en Sequelize ORM
+
+Básicamente, las migraciones mantienen el historial del esquema que se lleva en la base de datos. Es un sistema muy usado en ambientes de producción para trackear los cambios sin tener que replicar todo nuevamente (creación de tablas, llaves foráneas, etc). Es decir, permite saber en qué punto estaba para saber qué es lo que se tiene que modificar.
+
+sequelize.sync() empieza a leer los modelos, crea tablas y hace relist (se sobrescribe información), no se aconseja que se corra en producción. Es mejor sincronizar con un sistema de migraciones.
+
+Primero vamos a instalar la dependencia necesaria para utilizar migraciones con sequelize con el comando: npm i sequelize-cli -D
+
+Después creamos un archivo en la raiz de configuración inicial para sequelize
+
+***.sequelizerc***
+
+```javascript
+module.exports = {
+    config: './db/config.js', //Donde vamos a tener la configuración de la BBDD
+    'models-path': './db/models/', //Donde vamos a tener la inicialización de los modelos
+    'migrations-path': './db/migrations/', //Donde vamos a tener el historial de migraciones
+    'seeders-path': './db/seeders/' //Donde vamos a tener las semillas
+}
+```
+
+Por último, se crean las carpetas en las url que hemos configurado en el archivo anterior y el archivo config.js con el siguiente contenido:
+
+***./db/config.js***
+
+```javascript
+const { config } = require('../config/config')
+
+let URI = ''
+
+if (config.dbType == 'postgres') {
+    const USER = encodeURIComponent(config.dbPostgresUser)
+    const PASSWORD = encodeURIComponent(config.dbPostgresPassword)
+    URI = `postgres://${USER}:${PASSWORD}@${config.dbPostgresHost}:${config.dbPostgresPort}/${config.dbPostgresName}`
+}
+
+if (config.dbType == 'mysql') {
+    const USER = encodeURIComponent(config.dbMysqlUser)
+    const PASSWORD = encodeURIComponent(config.dbMysqlPassword)
+    URI = `mysql://${USER}:${PASSWORD}@${config.dbMysqlHost}:${config.dbMysqlPort}/${config.dbMysqlName}`
+}
+
+module.exports = {
+    development: {
+        url: URI,
+        dialect: 'postgres'
+    },
+    production: {
+        url: URI,
+        dialect: 'postgres'
+    }
+}
+```
