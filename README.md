@@ -859,3 +859,91 @@ Ahora tenemos listo para empezar con las migraciones, para ello usamos el script
 
 Esto crea en la base la configuración de tablas que le hemos añadido al archivo de la migración
 Además crea una tabla historial de las migraciones que hemos añadido a BBDD para en posteriores migraciones no añadirlas y seguir con las siguientes.
+
+## Clase 15 Modificando una entidad
+
+Para probar a modificar la tabla y crear una migración modificamos la tabla user añadiendo un atributo más (atributo role):
+
+***user.model.js***
+```javascript
+  const UserSchema = {
+    id: {
+        allowNull: false,
+        autoIncrement: true,
+        primaryKey: true,
+        type: DataTypes.INTEGER
+    },
+    email: {
+        allowNull: false,
+        type: DataTypes.STRING,
+        unique: true
+    },
+    password: {
+        allowNull: false,
+        type: DataTypes.STRING
+    },
+    role: {
+        allowNull: false,
+        type: DataTypes.STRING,
+        defaultValue: 'customer'
+    },
+    createdAt: {
+        allowNull: false,
+        type: DataTypes.DATE,
+        field: 'created_at',
+        defaultValue: Sequelize.NOW
+    }
+}
+```
+
+Generamos una nueva migración con el comando ***npm run migrations:generate add-role***. Esto nos crea un nuevo archivo de migración que vamos a modificar:
+
+```javascript
+'use strict'
+
+const { UserSchema, USER_TABLE } = require('../models/user.model')
+
+module.exports = {
+    async up(queryInterface) {
+        await queryInterface.addColumn(USER_TABLE, 'role', UserSchema.role)
+    },
+
+    async down(queryInterface) {
+        await queryInterface.removeColumn(USER_TABLE, 'role')
+    }
+}
+```
+
+Ahora ya podemos ejecutar el script ***npm run migrations:run*** y solo efectuará los cambios de la migración que aún no ha actualizado. Si volviéramos a ejecutar el comando nos dirá que no hay migraciones nuevas.
+
+También para requerir el dato role cuando se introduzca como obligatorio vamos a modificar el schema.
+
+***user.schema.js***
+
+```javascript
+const Joi = require('joi')
+
+const id = Joi.number().integer()
+const email = Joi.string().email()
+const password = Joi.string().min(8)
+const role = Joi.string().min(5)
+
+const createUserSchema = Joi.object({
+    email: email.required(),
+    password: password.required(),
+    role: role.required()
+})
+
+const updateUserSchema = Joi.object({
+    email: email,
+    role: role
+})
+
+const getUserSchema = Joi.object({
+    id: id.required()
+})
+
+module.exports = { createUserSchema, updateUserSchema, getUserSchema }
+```
+
+Con esto ya tenemos la migración en la base de datos y si probamos a introducir un nuevo elemento en la tabla con postman nos pedirá como obligatorio el atributo role.
