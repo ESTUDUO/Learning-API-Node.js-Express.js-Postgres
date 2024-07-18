@@ -806,3 +806,56 @@ module.exports = {
     }
 }
 ```
+
+## Clase 14 Configurando y corriendo migraciones con npm scripts
+
+Lo primero es crear el script de creación de la tabla incial. Para ello lo añadimos al package.json
+
+```JSON
+  "scripts": {
+    "dev": "nodemon api/index.js",
+    "start": "node api/index.js",
+    "lint": "eslint",
+    "migrations:generate": "sequelize-cli migration:generate --name" // --name es el nombre que le queramos dar a la nueva migración
+  },
+```
+
+Una vez lo tenemos ejecutamos el script: ***npm run migrations:generate create-user***
+
+Esto nos va a crear un archivo en la carpeta migraciones (ruta que configuramos en el archivo de configuración) con un stamp de fecha y el nombre que le hemos pasado por el comando. En este caso crea el archivo ***api\db\migrations\20240718164244-create-user.js***
+
+Este archivo se crea con un esqueleto base que debemos rellenar con los cambios de la migración. Añadimos al archivo creado lo siguiente:
+
+```javascript
+'use strict'
+
+const { UserSchema, USER_TABLE } = require('./../models/user.model')
+module.exports = {
+    async up(queryInterface) {
+        await queryInterface.createTable(USER_TABLE, UserSchema)
+    },
+
+    async down(queryInterface) {
+        await queryInterface.drop(USER_TABLE)
+    }
+}
+```
+
+Ahora creamos el resto de script en el package.json
+
+```JSON
+  "scripts": {
+    "dev": "nodemon api/index.js",
+    "start": "node api/index.js",
+    "lint": "eslint",
+    "migrations:generate": "sequelize-cli migration:generate --name", // --name es el nombre que le queramos dar a la nueva migración
+    "migrations:run": "sequelize-cli db:migrate", // Corre las migraciones pendientes
+    "migrations:revert": "sequelize-cli db:migrate:undo", // Deshace la última migración
+    "migrations:delete": "sequelize-cli db:migrate:undo:all" // Deshace todas las migraciones
+  }
+```
+
+Ahora tenemos listo para empezar con las migraciones, para ello usamos el script ***migrations:run***
+
+Esto crea en la base la configuración de tablas que le hemos añadido al archivo de la migración
+Además crea una tabla historial de las migraciones que hemos añadido a BBDD para en posteriores migraciones no añadirlas y seguir con las siguientes.
