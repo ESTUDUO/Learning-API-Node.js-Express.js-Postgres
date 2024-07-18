@@ -767,10 +767,10 @@ Después creamos un archivo en la raiz de configuración inicial para sequelize
 
 ```javascript
 module.exports = {
-    config: './db/config.js', //Donde vamos a tener la configuración de la BBDD
-    'models-path': './db/models/', //Donde vamos a tener la inicialización de los modelos
-    'migrations-path': './db/migrations/', //Donde vamos a tener el historial de migraciones
-    'seeders-path': './db/seeders/' //Donde vamos a tener las semillas
+    config: './api/db/config.js', //Donde vamos a tener la configuración de la BBDD
+    'models-path': './api/db/models/', //Donde vamos a tener la inicialización de los modelos
+    'migrations-path': './api/db/migrations/', //Donde vamos a tener el historial de migraciones
+    'seeders-path': './api/db/seeders/' //Donde vamos a tener las semillas
 }
 ```
 
