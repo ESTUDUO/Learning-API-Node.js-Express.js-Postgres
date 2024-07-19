@@ -809,6 +809,9 @@ module.exports = {
 
 ## Clase 14 Configurando y corriendo migraciones con npm scripts
 
+***Este apunte del sync de sequelize no me doy cuenta hasta la clase 16 de no haberlo quitado pero lo dejo en esta clase aunque en el código de esta clase está puesto, es un error***
+Antes de nada quitamos el sync de la configuración de sequelize en el archivo ***api\libs\sequelize.js***, eliminando la llamada a la función ***sequelize.sync()***. De esta manera ya no sincronizará al iniciar el run dev y todo lo hará por migraciones.
+
 Lo primero es crear el script de creación de la tabla incial. Para ello lo añadimos al package.json
 
 ```JSON
@@ -947,3 +950,333 @@ module.exports = { createUserSchema, updateUserSchema, getUserSchema }
 ```
 
 Con esto ya tenemos la migración en la base de datos y si probamos a introducir un nuevo elemento en la tabla con postman nos pedirá como obligatorio el atributo role.
+
+## Clase 15 Relaciones uno a uno
+
+Para empezar a crear una relación uno a uno (la más básica de todas) lo primero es crear el modelo de customer en la base de datos. Para ello rellenamos el modelo:
+
+***./api/db/models/customer.model.js***
+
+```javascript
+const { Model, DataTypes, Sequelize } = require('sequelize')
+
+const CUSTOMER_TABLE = 'customers'
+
+const CustomerSchema = {
+    id: { allowNull: false, autoIncrement: true, primaryKey: true, type: DataTypes.INTEGER },
+    name: { allowNull: false, type: DataTypes.STRING },
+    lastName: { allowNull: false, type: DataTypes.STRING, field: 'last_name' },
+    phone: { allowNull: true, type: DataTypes.STRING },
+    createdAt: {
+        allowNull: false,
+        type: DataTypes.DATE,
+        field: 'created_at',
+        defaultValue: Sequelize.NOW
+    }
+}
+class Customer extends Model {
+    static associate() {}
+    static config(sequelize) {
+        return { sequelize, tableName: CUSTOMER_TABLE, modelName: 'Customer', timestamps: false }
+    }
+}
+module.exports = { Customer, CustomerSchema, CUSTOMER_TABLE }
+```
+
+Después agregamos el modelo a la configuración inicial de la base de datos:
+
+***./api/db/index.js***
+
+```javascript
+const { User, UserSchema } = require('./user.model')
+const { Customer, CustomerSchema } = require('./customer.model')
+
+function setupModels(sequelize) {
+    User.init(UserSchema, User.config(sequelize))
+    Customer.init(CustomerSchema, Customer.config(sequelize))
+}
+
+module.exports = setupModels
+```
+
+Y le creamos el service, routes y schema de entrada:
+
+***./api/services/customer.service.js***
+
+```javascript
+const boom = require('@hapi/boom')
+
+const { models } = require('../libs/sequelize')
+
+class CustomerService {
+    constructor() {}
+
+    async find() {
+        const rta = await models.Customer.findAll()
+        return rta
+    }
+
+    async findOne(id) {
+        const user = await models.Customer.findByPk(id)
+        if (!user) {
+            throw boom.notFound('customer not found')
+        }
+        return user
+    }
+
+    async create(data) {
+        return data
+    }
+
+    async update(id, changes) {
+        const model = await this.findOne(id)
+        const rta = await model.update(changes)
+        return rta
+    }
+
+    async delete(id) {
+        const model = await this.findOne(id)
+        await model.destroy()
+        return { rta: true }
+    }
+}
+module.exports = CustomerService
+
+```
+
+***./api/routes/customer.router.js***
+
+```javascript
+const express = require('express')
+
+const CustomerService = require('../services/customer.service')
+const { validatorHandler } = require('../middlewares/validator.handler')
+const {
+    createCustomerSchema,
+    getCustomerSchema,
+    updateCustomerSchema
+} = require('../schemas/customer.schema')
+
+const router = express.Router()
+const service = new CustomerService()
+
+router.get('/', async (req, res, next) => {
+    try {
+        res.json(await service.find())
+    } catch (error) {
+        next(error)
+    }
+})
+
+router.post('/', validatorHandler(createCustomerSchema, 'body'), async (req, res, next) => {
+    try {
+        const body = req.body
+        res.status(201).json(await service.create(body))
+    } catch (error) {
+        next(error)
+    }
+})
+
+router.patch(
+    '/:id',
+    validatorHandler(getCustomerSchema, 'params'),
+    validatorHandler(updateCustomerSchema, 'body'),
+    async (req, res, next) => {
+        try {
+            const { id } = req.params
+            const body = req.body
+            res.status(201).json(await service.update(id, body))
+        } catch (error) {
+            next(error)
+        }
+    }
+)
+
+router.delete('/:id', validatorHandler(getCustomerSchema, 'params'), async (req, res, next) => {
+    try {
+        const { id } = req.params
+        res.status(200).json(await service.delete(id))
+    } catch (error) {
+        next(error)
+    }
+})
+
+module.exports = router
+```
+
+Añadimos al index.js de los routers la nueva ruta a customers:
+
+***./api/routes/index.js***
+
+```javascript
+const express = require('express')
+
+const productsRouter = require('./products.router')
+const categoriesRouter = require('./categories.router')
+const usersRouter = require('./users.router')
+const customersRouter = require('./customer.router')
+
+function routerApi(app) {
+    const router = express.Router()
+
+    app.use('/api/v1', router)
+    router.use('/products', productsRouter)
+    router.use('/categories', categoriesRouter)
+    router.use('/users', usersRouter)
+    router.use('/customers', customersRouter)
+}
+
+module.exports = routerApi
+
+```
+
+***./api/routes/customer.schema.js***
+
+```javascript
+const Joi = require('joi')
+
+const id = Joi.number().integer()
+const name = Joi.string().min(3).max(30)
+const lastName = Joi.string()
+const phone = Joi.string()
+
+const getCustomerSchema = Joi.object({ id: id.required() })
+
+const createCustomerSchema = Joi.object({
+    name: name.required(),
+    lastName: lastName.required(),
+    phone: phone.required()
+})
+
+const updateCustomerSchema = Joi.object({ name, lastName, phone })
+
+module.exports = { getCustomerSchema, createCustomerSchema, updateCustomerSchema }
+
+```
+
+Ahora una vez creado todo lo necesario para nuestro modelo de customer vamos a crear la relación entre customer y usuario. Para ello hacemos lo siguiente:
+
+- Añadimos un metodo associate al modelo del customer:
+
+***./api/routes/customer.schema.js***
+
+```javascript
+
+(...)
+
+class Customer extends Model {
+    static associate(models) {
+        this.belongsTo(models.User, { as: 'user' })
+    }
+    static config(sequelize) {
+        return { sequelize, tableName: CUSTOMER_TABLE, modelName: 'Customer', timestamps: false }
+    }
+}
+
+(...)
+
+```
+
+Y llamamos a esta función pasándole el modelo en el index.js de los models para la configuración inicial
+
+***./api/routes/customer.schema.js***
+
+```javascript
+
+(...)
+
+function setupModels(sequelize) {
+    User.init(UserSchema, User.config(sequelize))
+    Customer.init(CustomerSchema, Customer.config(sequelize))
+
+    Customer.associate(sequelize.models)
+}
+
+(...)
+
+```
+
+También añadimos al schema del modelo el id que se va a usar:
+
+```javascript
+
+(...)
+
+const { USER_TABLE } = require('./user.model')
+
+(...)
+
+    userId: {
+        field: 'user_id',
+        allowNull: false,
+        type: DataTypes.INTEGER,
+        unique: true,
+        references: { model: USER_TABLE, key: 'id' },
+        onUpdate: 'CASCADE',
+        onDelete: 'SET NULL'
+    }
+
+(...)
+
+```
+
+Una vez hecho todo esto, necesitamos crear la migración para este cambio en la bbdd. Para ello usamos el comando: ***npm run migrations:generate create-customers*** y lo modificamos:
+
+```javascript
+'use strict'
+
+const { CustomerSchema, CUSTOMER_TABLE } = require('./../models/customer.model')
+
+module.exports = {
+    async up(queryInterface) {
+        await queryInterface.createTable(CUSTOMER_TABLE, CustomerSchema)
+    },
+
+    async down(queryInterface) {
+        await queryInterface.drop(CUSTOMER_TABLE)
+    }
+}
+```
+
+Y por último ejecutamos el comando ***npm run migrations:run*** para que detecte y añada los cambios de la última migración.
+
+Una vez creado en base de datos, nos falta validar este dato cuando creamos un nuevo customer, para ello añadimos el nuevo campo al schema:
+
+***api\schemas\customer.schema.js***
+
+```javascript
+
+(...)
+
+const createCustomerSchema = Joi.object({
+    name: name.required(),
+    lastName: lastName.required(),
+    phone: phone.required(),
+    userId: userId.required()
+})
+
+const updateCustomerSchema = Joi.object({ name, lastName, phone, userId })
+
+(...)
+
+```
+
+Y completamos la función de creación del nuevo customer en el servicio:
+
+***api\services\customer.service.js***
+
+```javascript
+
+(...)
+
+    async create(data) {
+        const newCustomer = await models.Customer.create(data)
+
+        return newCustomer
+    }
+
+(...)
+
+```
+
+Ya tenemos todo para poder crear customers con relación al usuario con Postman y verlo en PGAdmin
