@@ -868,6 +868,7 @@ Además crea una tabla historial de las migraciones que hemos añadido a BBDD pa
 Para probar a modificar la tabla y crear una migración modificamos la tabla user añadiendo un atributo más (atributo role):
 
 ***user.model.js***
+
 ```javascript
   const UserSchema = {
     id: {
@@ -917,6 +918,10 @@ module.exports = {
 }
 ```
 
+> Si elimináramos todas las migraciones y volviéramos a ejecutar nos diría que ya tiene el campo role al intentar ejecutar esta migración. Esto es debido a que en la migración de crear user le indicamos el model, y ahora al haber añadido el campo role lo crearía en la primera migración. Esto no se muy bien como sería la forma correcta de hacerlo pero las opciones que se me ocurren son:***
+> -  Indicar solo los campos a crear y no todo el modelo (ineficiente)
+> - No agregar al modelo los campos que se ejecutan en migraciones (Esto a la larga deja atrasado el código)
+
 Ahora ya podemos ejecutar el script ***npm run migrations:run*** y solo efectuará los cambios de la migración que aún no ha actualizado. Si volviéramos a ejecutar el comando nos dirá que no hay migraciones nuevas.
 
 También para requerir el dato role cuando se introduzca como obligatorio vamos a modificar el schema.
@@ -951,7 +956,7 @@ module.exports = { createUserSchema, updateUserSchema, getUserSchema }
 
 Con esto ya tenemos la migración en la base de datos y si probamos a introducir un nuevo elemento en la tabla con postman nos pedirá como obligatorio el atributo role.
 
-## Clase 15 Relaciones uno a uno
+## Clase 16 Relaciones uno a uno
 
 Para empezar a crear una relación uno a uno (la más básica de todas) lo primero es crear el modelo de customer en la base de datos. Para ello rellenamos el modelo:
 
@@ -1280,3 +1285,299 @@ Y completamos la función de creación del nuevo customer en el servicio:
 ```
 
 Ya tenemos todo para poder crear customers con relación al usuario con Postman y verlo en PGAdmin
+
+## Clase 17 Resolviendo las relaciones uno a uno
+
+Antes de empezar esta clase hacemos una corrección de un bug encontrado en clases anteriores:
+
+Las migraciones de creación de tablas anteriores tenían un error en las funciones down, no deberían hacer un drop sino un dropTable:
+
+***api\db\migrations\20240718164244-create-user.js***
+
+```javascript
+'use strict'
+
+const { UserSchema, USER_TABLE } = require('./../models/user.model')
+module.exports = {
+    async up(queryInterface) {
+        await queryInterface.createTable(USER_TABLE, UserSchema)
+    },
+
+    async down(queryInterface) {
+        await queryInterface.dropTable(USER_TABLE)
+    }
+}
+```
+
+***api\db\migrations\20240719171041-create-customers.js***
+
+```javascript
+'use strict'
+
+const { CustomerSchema, CUSTOMER_TABLE } = require('./../models/customer.model')
+
+module.exports = {
+    async up(queryInterface) {
+        await queryInterface.createTable(CUSTOMER_TABLE, CustomerSchema)
+    },
+
+    async down(queryInterface) {
+        await queryInterface.dropTable(CUSTOMER_TABLE)
+    }
+}
+```
+
+Ahora si para esta clase se va a añadir una migración para añadir el campo unique a la columna user_id de la tabla costumers. Como en este proyecto ya lo habíamos agregado simplemente dejo el código de la migración aquí para ver como se hace un "changeColumn" en una migración pero no se va a implementar en el código.
+
+```javascript
+
+'use strict'
+const { DataTypes } = require('sequelize')
+
+const { CUSTOMER_TABLE } = require('./../models/customer.model')
+
+module.exports = {
+    up: async (queryInterface) => {
+        await queryInterface.changeColumn(CUSTOMER_TABLE, 'user_id', {
+            field: 'user_id',
+            allowNull: false,
+            type: DataTypes.INTEGER,
+            unique: true
+        })
+    },
+
+    down: async (queryInterface) => {
+        // await queryInterface.dropTable(CUSTOMER_TABLE);
+    }
+}
+
+```
+
+Ahora para que en la respuesta que nos da desde bbdd nos devuelva también la asociación incluida en la respuesta (ej: que customer incluya la info del usuario asociado o viceversa) vamos a hacer lo siguiente:
+
+Como ya teniamos la asociación creada en el ***customer.model.js***
+
+```javascript
+
+    static associate(models) {
+        this.belongsTo(models.User, { as: 'user' })
+    }
+
+```
+
+Podemos decirle en el ***customer.service.js*** que incluya esa asociación. Se le pasa un array con todas las asociaciones que queremos que incluya en la búsqueda. En este caso solo queremos la asociación con user (definida como 'user' en el modelo):
+
+```javascript
+
+    async find() {
+        const rta = await models.Customer.findAll({
+            include: ['user']
+        })
+        return rta
+    }
+
+```
+
+Esto ya devolvería en postman la asociación desde customer:
+
+```JSON
+
+[
+    {
+        "id": 2,
+        "name": "Sebastian",
+        "lastName": "Molina",
+        "phone": "685487541",
+        "createdAt": "2024-07-20T10:14:49.534Z",
+        "userId": 1,
+        "user": {
+            "id": 1,
+            "email": "prueba4@prueba.com",
+            "password": "1209463635232522625",
+            "role": "admin",
+            "createdAt": "2024-07-20T10:14:31.391Z"
+        }
+    }
+]
+
+```
+
+Para el caso del usuario hacemos lo mismo:
+
+Agregamos la asociación en el modelo del usuario  (en este caso no estaba hecha). En este caso al estar la relación del lado del customer tenemos que decirle la foreignKey:
+
+***api\db\models\user.model.js***
+
+```javascript
+
+    static associate(models) {
+        this.hasOne(models.Customer, {
+            as: 'customer',
+            foreignKey: 'userId'
+        })
+    }
+
+```
+
+Agregamos la asociación al index.js de la configuración de los modelos
+
+***api\db\models\index.js***
+
+```javascript
+
+function setupModels(sequelize) {
+    User.init(UserSchema, User.config(sequelize))
+    Customer.init(CustomerSchema, Customer.config(sequelize))
+
+    User.associate(sequelize.models)
+    Customer.associate(sequelize.models)
+}
+
+```
+
+Por último, completamos el find en el servicio de user:
+
+***api\services\user.service.js***
+
+```javascript
+
+    async find() {
+        const rta = await models.User.findAll({
+            include: ['customer']
+        })
+        return rta
+    }
+
+```
+
+Esto ya devolvería en postman la asociación desde user:
+
+```JSON
+
+[
+    {
+        "id": 1,
+        "email": "prueba4@prueba.com",
+        "password": "1209463635232522625",
+        "role": "admin",
+        "createdAt": "2024-07-20T10:14:31.391Z",
+        "customer": {
+            "id": 2,
+            "name": "Sebastian",
+            "lastName": "Molina",
+            "phone": "685487541",
+            "createdAt": "2024-07-20T10:14:49.534Z",
+            "userId": 1
+        }
+    }
+]
+
+```
+
+Ahora si lo que queremos es relacionar a la hora de crear, por ejemplo, al crear un costumer que automáticamente podamos enviar el usuario al que se asocia sin tener que crearlo previamente, haremos lo siguiente:
+
+Primero modificamos el schema del customer para que requerir nuevos datos, sin usar el userId (deberíamos conocerlo previamente y antes crear el usuario. Ahora lo hacemos directamente en el mismo endpoint).
+
+***api\schemas\customer.schema.js***
+
+```javascript
+const id = Joi.number().integer()
+const name = Joi.string().min(3).max(30)
+const lastName = Joi.string()
+const phone = Joi.string()
+const userId = Joi.number().integer()
+const email = Joi.string().email()
+const password = Joi.string()
+
+const getCustomerSchema = Joi.object({ id: id.required() })
+
+const createCustomerSchema = Joi.object({
+    name: name.required(),
+    lastName: lastName.required(),
+    phone: phone.required(),
+    user: Joi.object({
+        email: email.required(),
+        password: password.required()
+    })
+})
+```
+
+Ahora nos vamos al servicio para realizar la lógica:
+
+***api\services\customer.service.js***
+
+```javascript
+    async create(data) {
+        const newUser = await models.User.create(data.user)
+        const newCustomer = await models.Customer.create({
+            ...data, //Se le puede enviar todos los datos. Los atributos que no coincidan los va a ignorar
+            userId: newUser.id
+        })
+
+        return newCustomer
+    }
+```
+
+Ahora ya podemos enviar los datos con postman y creará tanto el costumer como el usuario asociado:
+
+```JSON
+{
+    "name": "Sebastian",
+    "lastName": "Molina",
+    "phone": "685487541",
+    "user": {
+        "email": "santi@email.com",
+        "password": "1234"
+    }
+}
+```
+
+Y nos devuelve el costumer con el usuario y su id asociado:
+
+```JSON
+{
+    "createdAt": "2024-08-09T17:56:41.470Z",
+    "id": 1,
+    "name": "Sebastian",
+    "lastName": "Molina",
+    "phone": "685487541",
+    "userId": 1
+}
+```
+
+Existe una forma de simplificar el código gracias a sequelize:
+
+En el servicio podemos pasar todos los datos y gracias a la asociación que ya tenemos definida sequelize va a crear también el usuario. Solo tenemos que indicarle explícitamente que incluya el user:
+
+***api\services\customer.service.js***
+
+```javascript
+    async create(data) {
+        const newCustomer = await models.Customer.create(data, {
+            include: ['user']
+        })
+
+        return newCustomer
+    }
+```
+
+De esta manera ahora postman mandando la misma información nos devuelve la asociación más completa:
+
+```JSON
+{
+    "createdAt": "2024-08-09T18:13:28.297Z",
+    "id": 3,
+    "name": "José",
+    "lastName": "Molina",
+    "phone": "685487541",
+    "user": {
+        "role": "customer",
+        "createdAt": "2024-08-09T18:13:28.297Z",
+        "id": 3,
+        "email": "jose@email.com",
+        "password": "1234"
+    },
+    "userId": 3
+}
+```
+
