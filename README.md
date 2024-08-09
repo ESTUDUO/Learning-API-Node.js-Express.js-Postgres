@@ -919,7 +919,8 @@ module.exports = {
 ```
 
 > Si elimináramos todas las migraciones y volviéramos a ejecutar nos diría que ya tiene el campo role al intentar ejecutar esta migración. Esto es debido a que en la migración de crear user le indicamos el model, y ahora al haber añadido el campo role lo crearía en la primera migración. Esto no se muy bien como sería la forma correcta de hacerlo pero las opciones que se me ocurren son:***
-> -  Indicar solo los campos a crear y no todo el modelo (ineficiente)
+>
+> - Indicar solo los campos a crear y no todo el modelo (ineficiente)
 > - No agregar al modelo los campos que se ejecutan en migraciones (Esto a la larga deja atrasado el código)
 
 Ahora ya podemos ejecutar el script ***npm run migrations:run*** y solo efectuará los cambios de la migración que aún no ha actualizado. Si volviéramos a ejecutar el comando nos dirá que no hay migraciones nuevas.
@@ -1581,3 +1582,231 @@ De esta manera ahora postman mandando la misma información nos devuelve la asoc
 }
 ```
 
+## Clase 18 Relaciones uno a muchos
+
+Ahora vamos a hacer lo mismo pero en relaciones uno a muchos. Para ello vamos a hacer que una categoría tenga muchos productos, pero un producto solo tiene una categoría.
+
+En primer lugar completamos el schema de producto:
+
+***api\schemas\product.schema.js***
+
+```javascript
+    const Joi = require('joi')
+
+    const id = Joi.string().uuid()
+    const name = Joi.string().min(3).max(15)
+    const price = Joi.number().integer().min(10)
+    const description = Joi.string().min(10)
+    const image = Joi.string().uri()
+
+    const createProductSchema = Joi.object({
+        name: name.required(),
+        price: price.required(),
+        description: description.required(),
+        image: image.required()
+    })
+
+    const updateProductSchema = Joi.object({
+        name: name,
+        price: price,
+        image: image,
+        description
+    })
+
+    const getProductSchema = Joi.object({
+        id: id.required()
+    })
+
+    module.exports = { createProductSchema, updateProductSchema, getProductSchema }
+```
+
+También creamos los modelos tanto de category como de product:
+
+***api\db\models\product.model.js***
+
+```javascript
+    const { Model, DataTypes, Sequelize } = require('sequelize')
+
+    const PRODUCT_TABLE = 'products'
+
+    const ProductSchema = {
+        id: {
+            allowNull: false,
+            autoIncrement: true,
+            primaryKey: true,
+            type: DataTypes.INTEGER
+        },
+        name: {
+            type: DataTypes.STRING,
+            unique: true,
+            allowNull: false
+        },
+        image: {
+            type: DataTypes.STRING,
+            allowNull: false
+        },
+        description: {
+            type: DataTypes.TEXT,
+            allowNull: false
+        },
+        price: {
+            type: DataTypes.INTEGER,
+            allowNull: false
+        },
+        createdAt: {
+            allowNull: false,
+            type: DataTypes.DATE,
+            field: 'created_at',
+            defaultValue: Sequelize.NOW
+        }
+    }
+
+    class Product extends Model {
+        static associate(models) {}
+        static config(sequelize) {
+            return { sequelize, tableName: PRODUCT_TABLE, modelName: 'Product', timestamps: false }
+        }
+    }
+
+    module.exports = { Product, ProductSchema, PRODUCT_TABLE }
+```
+
+***api\db\models\category.model.js***
+
+```javascript
+    const { Model, DataTypes, Sequelize } = require('sequelize')
+
+    const CATEGORY_TABLE = 'categories'
+
+    const CategorySchema = {
+        id: {
+            allowNull: false,
+            autoIncrement: true,
+            primaryKey: true,
+            type: DataTypes.INTEGER
+        },
+        name: {
+            type: DataTypes.STRING,
+            unique: true,
+            allowNull: false
+        },
+        image: {
+            type: DataTypes.STRING,
+            allowNull: false
+        },
+        createdAt: {
+            allowNull: false,
+            type: DataTypes.DATE,
+            field: 'created_at',
+            defaultValue: Sequelize.NOW
+        }
+    }
+
+    class Category extends Model {
+        static associate(models) {}
+        static config(sequelize) {
+            return { sequelize, tableName: CATEGORY_TABLE, modelName: 'Category', timestamps: false }
+        }
+    }
+
+    module.exports = { Category, CategorySchema, CATEGORY_TABLE }
+
+```
+
+Ahora vamos a crear la asociación. Para ello primero agregamos el atributo de categoría al producto necesario (categoryId) para asociación y añadimos el associate
+
+***api\db\models\product.model.js***
+
+```javascript
+
+(...)
+
+    const { CATEGORY_TABLE } = require('./category.model')
+
+(...)
+    },
+    categoryId: {
+        field: 'category_id',
+        allowNull: false,
+        type: DataTypes.INTEGER,
+        references: { model: CATEGORY_TABLE, key: 'id' },
+        onUpdate: 'CASCADE',
+        onDelete: 'SET NULL'
+
+(...)
+
+    static associate(models) {
+        this.belongsTo(models.Category, {
+            as: 'category'
+        })
+    }
+
+(...)
+
+```
+
+Y también añadimos el associate a la categoría:
+
+***api\db\models\category.model.js***
+
+```javascript
+
+(...)
+
+    static associate(models) {
+        this.hasMany(models.Product, {
+            as: 'products',
+            foreignKey: 'categoryId'
+        })
+    }
+
+(...)
+    
+```
+
+Y ya por último lo añadimos al index de configuración de modelos:
+
+```javascript
+
+(...)
+
+const { Category, CategorySchema } = require('./category.model')
+const { Product, ProductSchema } = require('./product.model')
+
+(...)
+    Category.init(CategorySchema, Category.config(sequelize))
+    Product.init(ProductSchema, Product.config(sequelize))
+
+(...)
+
+    Category.associate(sequelize.models)
+    Product.associate(sequelize.models)
+
+(...)
+
+```
+
+El último paso que queda sería crear la migración para añadir las 2 tablas con sus relaciones. Para ello ejecutamos el comando 'npm run migrations:generate products' y dentro añadimos los siguiente:
+
+```javascript
+
+'use strict'
+
+const { CategorySchema, CATEGORY_TABLE } = require('./../models/category.model')
+const { ProductSchema, PRODUCT_TABLE } = require('./../models/product.model')
+
+module.exports = {
+    async up(queryInterface) {
+        await queryInterface.createTable(CATEGORY_TABLE, CategorySchema)
+        await queryInterface.createTable(PRODUCT_TABLE, ProductSchema)
+    },
+
+    async down(queryInterface) {
+        await queryInterface.dropTable(CATEGORY_TABLE)
+        await queryInterface.dropTable(PRODUCT_TABLE)
+    }
+}
+
+```
+
+Ejecutamos el comando 'npm run migrations:run' y ya tenemos las tablas en la base de datos y sus relaciones.
