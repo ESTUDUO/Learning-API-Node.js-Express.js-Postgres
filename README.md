@@ -1810,3 +1810,172 @@ module.exports = {
 ```
 
 Ejecutamos el comando 'npm run migrations:run' y ya tenemos las tablas en la base de datos y sus relaciones.
+
+## Clase 19 Resolviendo relaciones uno a muchos
+
+Vamos a resolver las creaciones de esos productos asociados a una categoría. Para ello lo primero es poder crear categorías. Completamos la función create del servicio de categorías:
+
+***api\services\category.service.js***
+
+```javascript
+
+(...)
+
+const { models } = require('../libs/sequelize')
+
+(...)
+
+async create(data) {
+    const newCategory = await models.Category.create(data)
+    return newCategory
+    }
+
+(...)
+
+```
+
+Ahora podemos llamar al endpoint mediante postman para crear con post una categoría:
+
+Enviando:
+
+```JSON
+
+{
+    "name": "Category 1",
+    "image": "http://placeimg.com/640/480"
+}
+
+```
+
+Recibimos:
+
+```JSON
+
+{
+    "createdAt": "2024-08-10T20:13:25.601Z",
+    "id": 1,
+    "name": "Category 1",
+    "image": "http://placeimg.com/640/480"
+}
+
+```
+
+Vamos a hacer lo mismo ahora con los productos:
+
+***api\services\products.services.js***
+
+```javascript
+
+(...)
+
+const { models } = require('../libs/sequelize')
+
+(...)
+
+async create(data) {
+    const newProduct = await models.Product.create(data)
+    return newProduct
+}
+
+async find() {
+    const products = await models.Product.findAll()
+    return products
+}
+
+(...)
+
+```
+
+También se necesita modificar el schema para que ahora sea necesario mandar un categoryId al crear un producto:
+
+***api\schemas\product.schema.js***
+
+```javascript
+
+const categoryId = Joi.number().integer()
+
+const createProductSchema = Joi.object({
+    name: name.required(),
+    price: price.required(),
+    description: description.required(),
+    image: image.required(),
+    categoryId: categoryId.required()
+})
+
+const updateProductSchema = Joi.object({
+    name: name,
+    price: price,
+    image: image,
+    description: description,
+    categoryId: categoryId
+})
+
+```
+
+Añadimos al servicio del producto que nos devuelva en el find la categoría anidada:
+
+***api\services\products.services.js***
+
+```javascript
+
+async find() {
+    const products = await models.Product.findAll({ include: ['category'] })
+    return products
+}
+
+```
+
+Ahora si llamamos al get con postman nos devolverá la categoría anidada:
+
+```JSON
+
+[
+    {
+        "id": 2,
+        "name": "23asdasd",
+        "image": "http://placeimg.com/640/480",
+        "description": "asda sdfsdf sdf sdf sdf a",
+        "price": 1209,
+        "createdAt": "2024-08-11T18:06:13.704Z",
+        "categoryId": 3,
+        "category": {
+            "id": 3,
+            "name": "Category 2",
+            "image": "http://placeimg.com/640/480",
+            "createdAt": "2024-08-11T18:03:06.518Z"
+        }
+    },
+    {
+        "id": 7,
+        "name": "23asaddawwsd",
+        "image": "http://placeimg.com/640/480",
+        "description": "asda sdfsdf sdf sdf sdf a",
+        "price": 1209,
+        "createdAt": "2024-08-11T18:09:01.395Z",
+        "categoryId": 3,
+        "category": {
+            "id": 3,
+            "name": "Category 2",
+            "image": "http://placeimg.com/640/480",
+            "createdAt": "2024-08-11T18:03:06.518Z"
+        }
+    }
+]
+```
+
+Ahora vamos hacer lo propio para categorías y que devuelva solo las categorías en el endpoint de buscar todas las categorías pero en el de una en concreto nos devuelva todos los productos anidados:
+
+***api\services\category.service.js***
+
+```javascript
+
+async find() {
+    const categories = await models.Category.findAll()
+    return categories
+}
+
+async findOne(id) {
+    const category = await models.Category.findByPk(id, { include: ['products'] })
+    return category
+}
+```
