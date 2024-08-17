@@ -1979,3 +1979,255 @@ async findOne(id) {
     return category
 }
 ```
+
+## Clase 20 Órdenes de compra
+
+Vamos a crear una nueva tabla que va a ser "Orders". Esta tabla la vamos a usar para una relación muchos a muchos:
+
+***api\db\models\order.model.js***
+
+```javascript
+
+const { Model, DataTypes, Sequelize } = require('sequelize')
+
+const { CUSTOMER_TABLE } = require('./customer.model')
+
+const ORDER_TABLE = 'orders'
+
+const OrderSchema = {
+    id: { allowNull: false, autoIncrement: true, primaryKey: true, type: DataTypes.INTEGER },
+    customerId: {
+        field: 'customer_id',
+        allowNull: false,
+        type: DataTypes.INTEGER,
+        references: { model: CUSTOMER_TABLE, key: 'id' },
+        onUpdate: 'CASCADE',
+        onDelete: 'SET NULL'
+    },
+    createdAt: {
+        allowNull: false,
+        type: DataTypes.DATE,
+        field: 'created_at',
+        defaultValue: Sequelize.NOW
+    }
+}
+class Order extends Model {
+    static associate(models) {
+        this.belongsTo(models.Customer, { as: 'customer' }) // Una order pertenece a 1 customer
+    }
+    static config(sequelize) {
+        return { sequelize, tableName: ORDER_TABLE, modelName: 'Order', timestamps: false }
+    }
+}
+module.exports = { Order, OrderSchema, ORDER_TABLE }
+
+```
+
+Le agregamos la asociación también al modelo de customer (un customer puede tener muchas orders):
+
+***api\db\models\customer.model.js***
+
+```javascript
+
+static associate(models) {
+    this.belongsTo(models.User, { as: 'user' })
+    this.hasMany(models.Order, {
+        as: 'orders',
+        foreignKey: 'customerId'
+    })
+}
+
+```
+
+Y por último iniciamos el modelo y las asociaciones en sequelize:
+
+***api\db\models\index.js***
+
+```javascript
+
+const { Order, OrderSchema } = require('./order.model')
+
+function setupModels(sequelize) {
+    User.init(UserSchema, User.config(sequelize))
+    Customer.init(CustomerSchema, Customer.config(sequelize))
+    Category.init(CategorySchema, Category.config(sequelize))
+    Product.init(ProductSchema, Product.config(sequelize))
+    Order.init(OrderSchema, Order.config(sequelize))
+
+    User.associate(sequelize.models)
+    Customer.associate(sequelize.models)
+    Category.associate(sequelize.models)
+    Product.associate(sequelize.models)
+    Order.associate(sequelize.models)
+}
+
+```
+
+Ahora necesitamos hacer la migración para agregar la nueva tabla a la base de datos. Para ello ejecutamos el comando 'npm run migrations:generate order'.
+
+***api\db\migrations\20240813141409-order.js***
+
+```javascript
+'use strict'
+
+const { OrderSchema, ORDER_TABLE } = require('./../models/order.model')
+
+module.exports = {
+    async up(queryInterface) {
+        await queryInterface.createTable(ORDER_TABLE, OrderSchema)
+    },
+
+    async down(queryInterface) {
+        await queryInterface.dropTable(ORDER_TABLE)
+    }
+}
+
+```
+
+Vamos a completar el servicio de order:
+
+***api\services\order.service.js***
+
+```javascript
+
+const { models } = require('../libs/sequelize')
+
+(...)
+
+async create(data) {
+    const newOrder = await models.Order.create(data)
+    return newOrder
+}
+
+(...)
+
+async findOne(id) {
+        const order = await models.Order.findByPk(id, {
+            include: [
+                {
+                    association: 'customer', 
+                    include: ['user'] // Esta es una forma de hacer muchos subniveles de anidación (orders que devulve a su vez customer y a su vez usuario)
+                }
+            ]
+        })
+        return order
+    }
+
+(...)
+
+```
+
+También completamos el schema:
+
+***api\schemas\order.schema.js***
+
+```javascript
+
+const Joi = require('joi')
+
+const id = Joi.number().integer()
+const customerId = Joi.number().integer()
+
+const getOrderSchema = Joi.object({ id: id.required() })
+
+const createOrderSchema = Joi.object({ customerId: customerId.required() })
+
+module.exports = { getOrderSchema, createOrderSchema }
+
+```
+
+Por último completamos el router para poder acceder a los endpoints:
+
+***api\routes\orders.router.js***
+
+```javascript
+
+const express = require('express')
+
+const OrderService = require('../services/order.service')
+const { validatorHandler } = require('../middlewares/validator.handler')
+const { getOrderSchema, createOrderSchema } = require('../schemas/order.schema')
+
+const router = express.Router()
+const service = new OrderService()
+
+router.get('/:id', validatorHandler(getOrderSchema, 'params'), async (req, res, next) => {
+    try {
+        const { id } = req.params
+        const order = await service.findOne(id)
+        res.json(order)
+    } catch (error) {
+        next(error)
+    }
+})
+
+router.post('/', validatorHandler(createOrderSchema, 'body'), async (req, res, next) => {
+    try {
+        const body = req.body
+        const newOrder = await service.create(body)
+        res.status(201).json(newOrder)
+    } catch (error) {
+        next(error)
+    }
+})
+
+module.exports = router
+
+```
+
+Y lo agregamos también a las rutas generales del index:
+
+***api\db\models\index.js***
+
+```javascript
+
+(...)
+const orderRouter = require('./orders.router')
+(...)
+router.use('/orders', orderRouter)
+(...)
+
+```
+
+Ahora ya podemos hacer llamadas al endpoint para agregar orders:
+
+```JSON
+{
+    "customerId": 1 //Debe existir el customerId
+}
+```
+
+Y nos devuelve:
+
+```JSON
+{
+    "createdAt": "2024-08-17T10:13:13.510Z",
+    "id": 1,
+    "customerId": 1
+}
+```
+
+Y a su vez tenemos el endpoint /api/v1/orders/id que nos devuelve la información anidada del order:
+
+```JSON
+{
+    "id": 1,
+    "customerId": 1,
+    "createdAt": "2024-08-17T10:13:13.510Z",
+    "customer": {
+        "id": 1,
+        "name": "José3",
+        "lastName": "Molina",
+        "phone": "685487541",
+        "createdAt": "2024-08-17T10:13:06.194Z",
+        "userId": 1,
+        "user": {
+            "id": 1,
+            "email": "jose@email.com",
+            "password": "1234",
+            "role": "customer",
+            "createdAt": "2024-08-17T10:13:06.194Z"
+        }
+    }
+}
+```
