@@ -4,16 +4,21 @@ const { validatorHandler } = require('./../middlewares/validator.handler')
 const {
     createProductSchema,
     updateProductSchema,
-    getProductSchema
+    getProductSchema,
+    queryProductSchema
 } = require('./../schemas/product.schema')
 const router = express.Router()
 const service = new ProductsService()
 // Endpoint con datos random (con librería faker) y limite mediante query
 
-router.get('/', async (req, res) => {
-    const products = await service.find()
+router.get('/', validatorHandler(queryProductSchema, 'query'), async (req, res, next) => {
+    try {
+        const products = await service.find(req.query)
 
-    res.json(products)
+        res.json(products)
+    } catch (error) {
+        next(error)
+    }
 })
 
 // Endpoint simple de un nivel. Este caso choca con el anterior ya que lo detecta como un id.

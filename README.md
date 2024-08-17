@@ -2550,3 +2550,135 @@ Respuestas:
 }
 
 ```
+
+## Clase 23 Paginación
+
+Vamos a agregar paginación al endpoint get de productos. Para ello primero creamos el endpoint en el router:
+
+***api\routes\products.router.js***
+
+```javascript
+
+(...)
+
+    const { createProductSchema, updateProductSchema, getProductSchema, queryProductSchema} = require('./../schemas/product.schema')
+
+(...)
+
+    router.get('/', validatorHandler(queryProductSchema, 'query'), async (req, res, next) => {
+        try {
+            const products = await service.find(req.query)
+
+            res.json(products)
+        } catch (error) {
+            next(error)
+        }
+    })
+
+(...)
+
+```
+
+Modificamos el schema y el service con el limit (numero de elementos a devolver) y offset (posición de empiece del array para dovolver elementos en adelante) necesario para la paginación:
+
+***api\schemas\product.schema.js***
+
+```javascript
+
+(...)
+
+    const limit = Joi.number().integer()
+    const offset = Joi.number().integer()
+
+(...)
+
+    const queryProductSchema = Joi.object({
+        limit,
+        offset
+    })
+
+    module.exports = { createProductSchema, updateProductSchema, getProductSchema, queryProductSchema }
+
+(...)
+
+```
+
+***api\services\products.services.js***
+
+```javascript
+
+(...)
+
+    async find(query) {
+        const options = {
+            include: ['category']
+        }
+        const { limit, offset } = query
+        if (limit && offset) {
+            options.limit = limit
+            options.offset = offset
+        }
+        const products = await models.Product.findAll(options)
+        return products
+    }
+
+(...)
+
+```
+
+Con esto ya podemos hacer una consulta al endpoint de productos con limit y offset (no son obligatorios, en caso de no enviarlos devuelve todos):
+
+Datos de envío van en la query de la url:
+
+***/api/v1/products?limit=3&offset=12***
+
+```JSON
+[
+    {
+        "id": 18,
+        "name": "product 10",
+        "image": "http://placeimg.com/640/480",
+        "description": "asdad asdasdasdadasda",
+        "price": 1209,
+        "createdAt": "2024-08-17T17:16:56.814Z",
+        "categoryId": 3,
+        "category": {
+            "id": 3,
+            "name": "Category 2",
+            "image": "http://placeimg.com/640/480",
+            "createdAt": "2024-08-17T16:19:25.815Z"
+        }
+    },
+    {
+        "id": 19,
+        "name": "product 11",
+        "image": "http://placeimg.com/640/480",
+        "description": "asdad asdasdasdadasda",
+        "price": 1209,
+        "createdAt": "2024-08-17T17:16:59.476Z",
+        "categoryId": 3,
+        "category": {
+            "id": 3,
+            "name": "Category 2",
+            "image": "http://placeimg.com/640/480",
+            "createdAt": "2024-08-17T16:19:25.815Z"
+        }
+    },
+    {
+        "id": 20,
+        "name": "product 12",
+        "image": "http://placeimg.com/640/480",
+        "description": "asdad asdasdasdadasda",
+        "price": 1209,
+        "createdAt": "2024-08-17T17:17:02.610Z",
+        "categoryId": 3,
+        "category": {
+            "id": 3,
+            "name": "Category 2",
+            "image": "http://placeimg.com/640/480",
+            "createdAt": "2024-08-17T16:19:25.815Z"
+        }
+    }
+]
+
+```
