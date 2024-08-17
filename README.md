@@ -2231,3 +2231,115 @@ Y a su vez tenemos el endpoint /api/v1/orders/id que nos devuelve la informació
     }
 }
 ```
+
+## Clase 20 Relaciones muchos a muchos
+
+Ahora vamos a hacer relaciones muchos a muchos. Esto se gestiona con una tabla ternaria entre los 2 modelos:
+
+***api\db\models\order-product.model.js***
+
+```javascript
+
+const { Model, DataTypes, Sequelize } = require('sequelize')
+
+const { ORDER_TABLE } = require('./order.model')
+const { PRODUCT_TABLE } = require('./product.model')
+
+const ORDER_PRODUCT_TABLE = 'orders_products'
+
+const OrderProductSchema = {
+    id: { allowNull: false, autoIncrement: true, primaryKey: true, type: DataTypes.INTEGER },
+    createdAt: {
+        allowNull: false,
+        type: DataTypes.DATE,
+        field: 'created_at',
+        defaultValue: Sequelize.NOW
+    },
+    amount: {
+        allowNull: false,
+        type: DataTypes.INTEGER
+    },
+    orderId: {
+        field: 'order_id',
+        allowNull: false,
+        type: DataTypes.INTEGER,
+        references: { model: ORDER_TABLE, key: 'id' },
+        onUpdate: 'CASCADE',
+        onDelete: 'SET NULL'
+    },
+    productId: {
+        field: 'product_id',
+        allowNull: false,
+        type: DataTypes.INTEGER,
+        references: { model: PRODUCT_TABLE, key: 'id' },
+        onUpdate: 'CASCADE',
+        onDelete: 'SET NULL'
+    }
+}
+class OrderProduct extends Model {
+    static associate(models) {}
+    static config(sequelize) {
+        return {
+            sequelize,
+            tableName: ORDER_PRODUCT_TABLE,
+            modelName: 'OrderProduct',
+            timestamps: false
+        }
+    }
+}
+module.exports = { OrderProduct, OrderProductSchema, ORDER_PRODUCT_TABLE }
+
+```
+
+Generamos la migración con 'npm run migrations:generate order-product' y la ejecutamos después 'npm run migrations:run':
+
+***api\db\migrations\20240817105622-order-product.js***
+
+```javascript
+
+'use strict'
+
+const { OrderProductSchema, ORDER_PRODUCT_TABLE } = require('./../models/order-product.model')
+
+module.exports = {
+    async up(queryInterface) {
+        await queryInterface.createTable(ORDER_PRODUCT_TABLE, OrderProductSchema)
+    },
+
+    async down(queryInterface) {
+        await queryInterface.dropTable(ORDER_PRODUCT_TABLE)
+    }
+}
+
+```
+
+Por último vamos a crear la asociación e iniciar el modelo nuevo:
+
+***api\db\models\order.model.js***
+
+```javascript
+
+(...)
+        this.belongsToMany(models.Product, {
+            as: 'items',
+            through: models.OrderProduct,
+            foreignKey: 'orderID',
+            otherKey: 'productId'
+        })
+(...)
+
+```
+
+***api\db\models\index.js***
+
+```javascript
+
+(...)
+
+const { OrderProduct, OrderProductSchema } = require('./order-product.model')
+
+(...)
+
+OrderProduct.init(OrderProductSchema, OrderProduct.config(sequelize))
+
+```
