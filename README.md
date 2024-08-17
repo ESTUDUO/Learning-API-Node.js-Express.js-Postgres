@@ -2232,7 +2232,7 @@ Y a su vez tenemos el endpoint /api/v1/orders/id que nos devuelve la informació
 }
 ```
 
-## Clase 20 Relaciones muchos a muchos
+## Clase 21 Relaciones muchos a muchos
 
 Ahora vamos a hacer relaciones muchos a muchos. Esto se gestiona con una tabla ternaria entre los 2 modelos:
 
@@ -2323,7 +2323,7 @@ Por último vamos a crear la asociación e iniciar el modelo nuevo:
         this.belongsToMany(models.Product, {
             as: 'items',
             through: models.OrderProduct,
-            foreignKey: 'orderID',
+            foreignKey: 'orderId',
             otherKey: 'productId'
         })
 (...)
@@ -2341,5 +2341,212 @@ const { OrderProduct, OrderProductSchema } = require('./order-product.model')
 (...)
 
 OrderProduct.init(OrderProductSchema, OrderProduct.config(sequelize))
+
+```
+
+## Clase 22 Resolviendo relaciones muchos a muchos
+
+Vamos a agregar la ruta para poder llamar al endpoint que agregue un item dentro de las rutas de order:
+
+***api\routes\orders.router.js***
+
+```javascript
+
+(...)
+
+    const { getOrderSchema, createOrderSchema, addItemSchema } = require('../schemas/order.schema')
+
+(...)
+
+
+    router.post('/add-item', validatorHandler(addItemSchema, 'body'), async (req, res, next) => {
+        try {
+            const body = req.body
+            const newItem = await service.addItem(body)
+            res.status(201).json(newItem)
+        } catch (error) {
+            next(error)
+        }
+    })
+
+(...)
+
+```
+
+También modificamos el schema y el service de order:
+
+***api\schemas\order.schema.js***
+
+```javascript
+
+const Joi = require('joi')
+
+const id = Joi.number().integer()
+const customerId = Joi.number().integer()
+const orderId = Joi.number().integer()
+const productId = Joi.number().integer()
+const amount = Joi.number().integer().min(1)
+
+const getOrderSchema = Joi.object({ id: id.required() })
+
+const createOrderSchema = Joi.object({ customerId: customerId.required() })
+
+const addItemSchema = Joi.object({
+    orderId: orderId.required(),
+    productId: productId.required(),
+    amount: amount.required()
+})
+
+module.exports = { getOrderSchema, createOrderSchema, addItemSchema }
+
+```
+
+***api\services\order.service.js***
+
+```javascript
+
+(...)
+
+    async addItem(data) {
+        const newItem = await models.OrderProduct.create(data)
+        return newItem
+    }
+
+(...)
+
+    async findOne(id) {
+        const order = await models.Order.findByPk(id, {
+            include: [
+                {
+                    association: 'customer',
+                    include: ['user']
+                },
+                'items'
+            ]
+        })
+        return order
+    }
+
+(...)
+
+```
+
+Por último vamos a hacer un calculo que haga cálculo con alguno de los campos que devuelve la consulta. Por ejemplo, el total del precio de la orden de compra de todos los productos.
+
+***api\db\models\order.model.js***
+
+```javascript
+
+(...)
+
+    },
+    total: {
+        type: DataTypes.VIRTUAL, // Esto indica a sequelize que no es un campo de base de datos
+        get() {
+            if (this.items.length > 0) {
+                return this.items.reduce((total, item) => {
+                    return total + item.price * item.OrderProduct.amount // Esto solo se debe usar para cálculos pequeños. Para cálculos grandes se debe dejar que node lo realice en una consulta
+                }, 0)
+            }
+            return 0
+        }
+    }
+
+(...)
+
+```
+
+Y ya con esto podemos hacer consultas con postman para agregar y consultar orders:
+
+Datos de envío:
+
+***/api/v1/orders/add-item***
+
+```JSON
+{
+    "orderId": 4,
+    "productId": 3,
+    "amount": 5
+}
+
+```
+
+***/api/v1/orders/id***
+
+No necesarios, solo indicar el id existente
+
+Respuestas:
+
+***/api/v1/orders/add-item***
+
+```JSON
+{
+    "createdAt": "2024-08-17T16:43:55.164Z",
+    "id": 10,
+    "orderId": 4,
+    "productId": 3,
+    "amount": 5
+}
+
+```
+
+***/api/v1/orders/id***
+
+```JSON
+{
+    "total": 8463,
+    "id": 1,
+    "customerId": 1,
+    "createdAt": "2024-08-17T10:13:13.510Z",
+    "customer": {
+        "id": 1,
+        "name": "José3",
+        "lastName": "Molina",
+        "phone": "685487541",
+        "createdAt": "2024-08-17T10:13:06.194Z",
+        "userId": 1,
+        "user": {
+            "id": 1,
+            "email": "jose@email.com",
+            "password": "1234",
+            "role": "customer",
+            "createdAt": "2024-08-17T10:13:06.194Z"
+        }
+    },
+    "items": [
+        {
+            "id": 3,
+            "name": "23a3434sa34ws3d",
+            "image": "http://placeimg.com/640/480",
+            "description": "asda sdfsdf sdf sdf sdf a",
+            "price": 1209,
+            "createdAt": "2024-08-17T16:19:50.286Z",
+            "categoryId": 5,
+            "OrderProduct": {
+                "id": 5,
+                "createdAt": "2024-08-17T16:36:06.178Z",
+                "amount": 2,
+                "orderId": 1,
+                "productId": 3
+            }
+        },
+        {
+            "id": 6,
+            "name": "23a3434s34ws3pd",
+            "image": "http://placeimg.com/640/480",
+            "description": "asda sdfsdf sdf sdf sdf a",
+            "price": 1209,
+            "createdAt": "2024-08-17T16:21:07.794Z",
+            "categoryId": 1,
+            "OrderProduct": {
+                "id": 4,
+                "createdAt": "2024-08-17T16:35:35.223Z",
+                "amount": 5,
+                "orderId": 1,
+                "productId": 6
+            }
+        }
+    ]
+}
 
 ```
