@@ -2682,3 +2682,134 @@ Datos de envío van en la query de la url:
 ]
 
 ```
+
+## Clase 24 Filtrando precios con operadores
+
+Vamos a hacer una consulta con filtros. Por ejemplo, por precio, tanto un valor concreto como con máximos y mínimos. Para ello cambiamos tanto el schema como el service:
+
+***api\schemas\product.schema.js***
+
+```javascript
+
+(...)
+
+    const price_min = Joi.number().integer().min(10)
+    const price_max = Joi.number().integer().min(10)
+
+(...)
+
+    const queryProductSchema = Joi.object({
+    limit,
+    offset,
+    price,
+    price_min,
+    price_max: price_max.when('price_min', { // Con esto validamos que si nos mandan un mínimo el price_max se vuelve obligatorio.
+        is: Joi.number().integer().required(),
+        then: Joi.required()
+    })
+})
+
+```
+
+***api\services\products.services.js***
+
+```javascript
+
+(...)
+
+    const { Op } = require('sequelize')
+
+(...)
+
+    const options = {
+        include: ['category'],
+        where: {}
+    }
+
+(...)
+
+    async find(query) {
+        const options = {
+            include: ['category'],
+            where: {}
+        }
+        const { limit, offset } = query
+        if (limit && offset) {
+            options.limit = limit
+            options.offset = offset
+        }
+        const { price } = query
+        if (price) {
+            options.where.price = price
+        }
+
+        const { price_min, price_max } = query
+        if (price_min && price_max) {
+            options.where.price = {
+                [Op.gte]: price_min,
+                [Op.lte]: price_max
+            }
+        }
+
+        const products = await models.Product.findAll(options)
+        return products
+    }
+
+(...)
+
+```
+
+Ahora ya podemos hacer consultas al endpoint con las querys de precio máximo y mínimo. También en combinación con las anteriores querys-params (limit, offset):
+
+***/api/v1/products?limit=3&offset=0&price_min=10&price_max=70***
+
+```JSON
+[
+    {
+        "id": 3,
+        "name": "23a3434sa34ws3d",
+        "image": "http://placeimg.com/640/480",
+        "description": "asda sdfsdf sdf sdf sdf a",
+        "price": 10,
+        "createdAt": "2024-08-17T16:19:50.286Z",
+        "categoryId": 5,
+        "category": {
+            "id": 5,
+            "name": "Category 4",
+            "image": "http://placeimg.com/640/480",
+            "createdAt": "2024-08-17T16:19:31.479Z"
+        }
+    },
+    {
+        "id": 6,
+        "name": "23a3434s34ws3pd",
+        "image": "http://placeimg.com/640/480",
+        "description": "asda sdfsdf sdf sdf sdf a",
+        "price": 20,
+        "createdAt": "2024-08-17T16:21:07.794Z",
+        "categoryId": 1,
+        "category": {
+            "id": 1,
+            "name": "Category 5",
+            "image": "http://placeimg.com/640/480",
+            "createdAt": "2024-08-17T16:19:19.189Z"
+        }
+    },
+    {
+        "id": 7,
+        "name": "232",
+        "image": "http://placeimg.com/640/480",
+        "description": "asdad asdasdasdadasda",
+        "price": 30,
+        "createdAt": "2024-08-17T17:16:09.295Z",
+        "categoryId": 3,
+        "category": {
+            "id": 3,
+            "name": "Category 2",
+            "image": "http://placeimg.com/640/480",
+            "createdAt": "2024-08-17T16:19:25.815Z"
+        }
+    }
+]
+
+```
