@@ -2813,3 +2813,9 @@ Ahora ya podemos hacer consultas al endpoint con las querys de precio máximo y 
 ]
 
 ```
+
+## Extra Fix de migraciones
+
+Las migraciones tienen un error al desplegar de primeras todas de seguido. Este error es que se están usando los schemas de los modelos .js que hemos ido cambiando pero eso no conserva el historial por lo que dan incompatibilidades. Por ejemplo, en la primera migración se crea el usuario y se utiliza el esquema del modelo (este modelo con el tiempo lo hemos ido cambiando y va actualizando el schema) por ello cuando llega la segunda migración y quiera agregar el campo role, este ya está en el schema y falla. Para solucionar todo esto no se debe usar los schemas de los modelos en las migraciones sino agregar directamente el json, aunque se duplique código. Es la forma de conservar el historial de cambios.
+
+Se modifican todas las migraciones en el código de esta manera.
